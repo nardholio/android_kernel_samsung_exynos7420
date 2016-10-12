@@ -214,6 +214,14 @@ do {									\
 #define AIBSS_BCN_FLOOD_DUR		5000
 #endif /* WLAIBSS */
 
+/* cfg80211 wowlan definitions */
+#define WL_WOWLAN_MAX_PATTERNS			8
+#define WL_WOWLAN_MIN_PATTERN_LEN		1
+#define WL_WOWLAN_MAX_PATTERN_LEN		255
+#define WL_WOWLAN_PKT_FILTER_ID_FIRST	201
+#define WL_WOWLAN_PKT_FILTER_ID_LAST	(WL_WOWLAN_PKT_FILTER_ID_FIRST + \
+									WL_WOWLAN_MAX_PATTERNS - 1)
+
 /* driver status */
 enum wl_status {
 	WL_STATUS_READY = 0,

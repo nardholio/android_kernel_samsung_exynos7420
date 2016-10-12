@@ -7636,22 +7636,25 @@ s32 wl_mode_to_nl80211_iftype(s32 mode)
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
 static const struct wiphy_wowlan_support brcm_wowlan_support = {
 	.flags = WIPHY_WOWLAN_ANY,
+	.n_patterns = WL_WOWLAN_MAX_PATTERNS,
+	.pattern_min_len = WL_WOWLAN_MIN_PATTERN_LEN,
+	.pattern_max_len = WL_WOWLAN_MAX_PATTERN_LEN,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0))
+	.max_pkt_offset = WL_WOWLAN_MAX_PATTERN_LEN,
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0) */
 };
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0) */
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0))
-static struct cfg80211_wowlan brcm_wowlan_config = {
-	.disconnect = true,
-	.gtk_rekey_failure = true,
-	.eap_identity_req = true,
-	.four_way_handshake = true,
-};
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0) */
 #endif /* CONFIG_PM */
 
 static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev, void *context)
 {
 	s32 err = 0;
+#ifdef CONFIG_PM
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0))
+	struct cfg80211_wowlan *brcm_wowlan_config = NULL;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0) */
+#endif /* CONFIG_PM */
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0) || defined(WL_COMPAT_WIRELESS))
 	dhd_pub_t *dhd = (dhd_pub_t *)context;
 	BCM_REFERENCE(dhd);
@@ -7782,9 +7785,28 @@ static s32 wl_setup_wiphy(struct wireless_dev *wdev, struct device *sdiofunc_dev
 	/* If this is not provided cfg stack will get disconnect
 	* during suspend.
 	*/
-	wdev->wiphy->wowlan_config = &brcm_wowlan_config;
+	brcm_wowlan_config = kzalloc(sizeof(struct cfg80211_wowlan), GFP_KERNEL);
+	if (brcm_wowlan_config) {
+		brcm_wowlan_config->disconnect = true;
+		brcm_wowlan_config->gtk_rekey_failure = true;
+		brcm_wowlan_config->eap_identity_req = true;
+		brcm_wowlan_config->four_way_handshake = true;
+		brcm_wowlan_config->patterns = NULL;
+		brcm_wowlan_config->n_patterns = 0;
+		brcm_wowlan_config->tcp = NULL;
+	} else {
+		WL_ERR(("Can not allocate memory for brcm_wowlan_config,"
+			" So wiphy->wowlan_config is set to NULL\n"));
+	}
+	wdev->wiphy->wowlan_config = brcm_wowlan_config;
 #else
 	wdev->wiphy->wowlan.flags = WIPHY_WOWLAN_ANY;
+	wdev->wiphy->wowlan.n_patterns = WL_WOWLAN_MAX_PATTERNS;
+	wdev->wiphy->wowlan.pattern_min_len = WL_WOWLAN_MIN_PATTERN_LEN;
+	wdev->wiphy->wowlan.pattern_max_len = WL_WOWLAN_MAX_PATTERN_LEN;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0))
+	wdev->wiphy->wowlan.max_pkt_offset = WL_WOWLAN_MAX_PATTERN_LEN;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0) */
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0) */
 #endif /* CONFIG_PM && WL_CFG80211_P2P_DEV_IF */
 

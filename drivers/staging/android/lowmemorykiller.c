@@ -57,6 +57,9 @@ static uint32_t oom_count = 0;
 #define OOM_DEPTH 5
 #endif
 
+#define CREATE_TRACE_POINTS
+#include "trace/lowmemorykiller.h"
+
 static uint32_t lowmem_debug_level = 1;
 static short lowmem_adj[6] = {
 	0,
@@ -117,32 +120,10 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int selected_tasksize = 0;
 	short selected_oom_score_adj;
 	int array_size = ARRAY_SIZE(lowmem_adj);
-	int other_free;
-	int other_file;
-	unsigned long nr_to_scan = sc->nr_to_scan;
-	struct reclaim_state *reclaim_state;
-
-	if (nr_to_scan > 0) {
-		if (mutex_lock_interruptible(&scan_mutex) < 0)
-			return 0;
-	}
-
-	other_free = global_page_state(NR_FREE_PAGES);
-	other_file = global_page_state(NR_FILE_PAGES) -
-						global_page_state(NR_SHMEM);
-#ifdef CONFIG_DMA_CMA
-	other_free -= global_page_state(NR_FREE_CMA_PAGES);
-#endif
-
-	reclaim_state = current->reclaim_state;
-
-#ifdef CONFIG_ZSWAP
-	/* to prevent other_file underflow and then be negative */
-	if (other_file > total_swapcache_pages())
-		other_file -= total_swapcache_pages();
-	else
-		other_file = 0;
-#endif
+	int other_free = global_page_state(NR_FREE_PAGES) - totalreserve_pages;
+	int other_file = global_page_state(NR_FILE_PAGES) -
+						global_page_state(NR_SHMEM) -
+						total_swapcache_pages();
 
 	if (lowmem_adj_size < array_size)
 		array_size = lowmem_adj_size;
@@ -435,9 +416,8 @@ static int android_oom_handler(struct notifier_block *nb,
 		selected = p;
 		selected_tasksize = tasksize;
 		selected_oom_score_adj = oom_score_adj;
-		lowmem_print(2, "oom: select %d (%s), adj %d, size %d, to kill\n",
-			     p->pid, p->comm, oom_score_adj, tasksize);
-#endif
+		lowmem_print(2, "select '%s' (%d), adj %hd, size %d, to kill\n",
+			     p->comm, p->pid, oom_score_adj, tasksize);
 	}
 #ifdef MULTIPLE_OOM_KILLER
 	for (i = 0; i < OOM_DEPTH; i++) {
@@ -458,11 +438,24 @@ static int android_oom_handler(struct notifier_block *nb,
 	}
 #else
 	if (selected) {
-		lowmem_print(1, "oom: send sigkill to %d (%s), adj %d, size %d\n",
-			     selected->pid, selected->comm,
-			     selected_oom_score_adj, selected_tasksize);
-		send_sig(SIGKILL, selected, 0);
+		long cache_size = other_file * (long)(PAGE_SIZE / 1024);
+		long cache_limit = minfree * (long)(PAGE_SIZE / 1024);
+		long free = other_free * (long)(PAGE_SIZE / 1024);
+		trace_lowmemory_kill(selected, cache_size, cache_limit, free);
+		lowmem_print(1, "Killing '%s' (%d), adj %hd,\n" \
+				"   to free %ldkB on behalf of '%s' (%d) because\n" \
+				"   cache %ldkB is below limit %ldkB for oom_score_adj %hd\n" \
+				"   Free memory is %ldkB above reserved\n",
+			     selected->comm, selected->pid,
+			     selected_oom_score_adj,
+			     selected_tasksize * (long)(PAGE_SIZE / 1024),
+			     current->comm, current->pid,
+			     cache_size, cache_limit,
+			     min_score_adj,
+			     free);
+		lowmem_deathpending_timeout = jiffies + HZ;
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
+		send_sig(SIGKILL, selected, 0);
 		rem -= selected_tasksize;
 		*freed += (unsigned long)selected_tasksize;
 #ifdef OOM_COUNT_READ

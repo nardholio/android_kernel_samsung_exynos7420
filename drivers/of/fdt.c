@@ -887,7 +887,6 @@ int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
 	unsigned long l = 0;
 	char *p = NULL;
 	char *cmdline = data;
-	__be32 *rev, *serial;
 
 	pr_debug("search \"chosen\", depth: %d, uname: %s\n", depth, uname);
 
@@ -918,16 +917,6 @@ int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
 		} else {
 			strlcpy(cmdline, p, min((int)l, COMMAND_LINE_SIZE));
 		}
-	}
-
-	rev = of_get_flat_dt_prop(node, "revision", &l);
-	if (rev !=NULL && l > 0)
-		system_rev = be32_to_cpup(rev);
-
-	serial = of_get_flat_dt_prop(node, "serial", &l);
-	if (serial !=NULL && l > 0) {
-		system_serial_low = be32_to_cpup(serial++);
-		system_serial_high = be32_to_cpup(serial);
 	}
 
 	pr_debug("Command line is: %s\n", (char*)data);

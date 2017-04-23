@@ -301,11 +301,7 @@ static int evdev_release(struct inode *inode, struct file *file)
 	evdev_detach_client(evdev, client);
 	if (client->use_wake_lock)
 		wake_lock_destroy(&client->wake_lock);
-
-	if (is_vmalloc_addr(client))
-		vfree(client);
-	else
-		kfree(client);
+	kfree(client);
 
 	evdev_close_device(evdev);
 
@@ -720,8 +716,8 @@ static int evdev_disable_suspend_block(struct evdev *evdev,
 
 	spin_lock_irq(&client->buffer_lock);
 	client->use_wake_lock = false;
-	wake_lock_destroy(&client->wake_lock);
 	spin_unlock_irq(&client->buffer_lock);
+	wake_lock_destroy(&client->wake_lock);
 
 	return 0;
 }

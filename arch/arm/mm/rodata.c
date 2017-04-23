@@ -24,9 +24,7 @@
 
 #include "mm.h"
 
-#ifdef CONFIG_DEBUG_RODATA
 static int kernel_set_to_readonly __read_mostly;
-#endif
 
 #ifdef CONFIG_DEBUG_RODATA_TEST
 static const int rodata_test_data = 0xC3;
@@ -90,7 +88,7 @@ static int set_page_attributes(unsigned long virt, int numpages,
 		pmd_end = min(ALIGN(virt + 1, PMD_SIZE), end);
 
 		if ((pmd_val(*pmd) & PMD_TYPE_MASK) != PMD_TYPE_TABLE) {
-			pr_err("%s: pmd %p=%08x for %08lx not page table\n",
+			pr_err("%s: pmd %p=%08lx for %08lx not page table\n",
 				__func__, pmd, pmd_val(*pmd), virt);
 			virt = pmd_end;
 			continue;
@@ -120,21 +118,6 @@ int set_memory_rw(unsigned long virt, int numpages)
 }
 EXPORT_SYMBOL(set_memory_rw);
 
-int set_memory_xn(unsigned long virt, int numpages)
-{
-	return set_page_attributes(virt, numpages, pte_mknoexec);
-}
-EXPORT_SYMBOL(set_memory_xn);
-
-#if defined(CONFIG_USE_DIRECT_IS_CONTROL) || defined(CONFIG_USE_HOST_FD_LIBRARY)
-int set_memory_x(unsigned long virt, int numpages)
-{
-	return set_page_attributes(virt, numpages, pte_mkexec);
-}
-EXPORT_SYMBOL(set_memory_x);
-#endif
-
-#ifdef CONFIG_DEBUG_RODATA
 void set_kernel_text_rw(void)
 {
 	unsigned long start = PAGE_ALIGN((unsigned long)_text);
@@ -173,7 +156,4 @@ void mark_rodata_ro(void)
 	set_kernel_text_ro();
 
 	rodata_test();
-
-	mark_data_noexec();
 }
-#endif

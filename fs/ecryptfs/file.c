@@ -90,6 +90,7 @@ static ssize_t ecryptfs_read_update_atime(struct kiocb *iocb,
 }
 
 struct ecryptfs_getdents_callback {
+	struct dir_context ctx;
 	void *dirent;
 	struct dentry *dentry;
 	filldir_t filldir;
@@ -137,18 +138,19 @@ static int ecryptfs_readdir(struct file *file, void *dirent, filldir_t filldir)
 	int rc;
 	struct file *lower_file;
 	struct inode *inode;
-	struct ecryptfs_getdents_callback buf;
+	struct ecryptfs_getdents_callback buf = {
+		.dirent = dirent,
+		.dentry = file->f_path.dentry,
+		.filldir = filldir,
+		.filldir_called = 0,
+		.entries_written = 0,
+		.ctx.actor = ecryptfs_filldir
+	};
 
 	lower_file = ecryptfs_file_to_lower(file);
 	lower_file->f_pos = file->f_pos;
 	inode = file_inode(file);
-	memset(&buf, 0, sizeof(buf));
-	buf.dirent = dirent;
-	buf.dentry = file->f_path.dentry;
-	buf.filldir = filldir;
-	buf.filldir_called = 0;
-	buf.entries_written = 0;
-	rc = vfs_readdir(lower_file, ecryptfs_filldir, (void *)&buf);
+	rc = iterate_dir(lower_file, &buf.ctx);
 	file->f_pos = lower_file->f_pos;
 	if (rc < 0)
 		goto out;
@@ -273,76 +275,18 @@ out:
 	return rc;
 }
 
-#if defined(CONFIG_MMC_DW_FMP_ECRYPT_FS) || defined(CONFIG_UFS_FMP_ECRYPT_FS)
-static void ecryptfs_set_rapages(struct file *file, unsigned int flag)
+static int ecryptfs_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	if (!flag)
-		file->f_ra.ra_pages = 0;
-	else
-		file->f_ra.ra_pages = (unsigned int)file->f_mapping->backing_dev_info->ra_pages;
+	struct file *lower_file = ecryptfs_file_to_lower(file);
+	/*
+	 * Don't allow mmap on top of file systems that don't support it
+	 * natively.  If FILESYSTEM_MAX_STACK_DEPTH > 2 or ecryptfs
+	 * allows recursive mounting, this will need to be extended.
+	 */
+	if (!lower_file->f_op->mmap)
+		return -ENODEV;
+	return generic_file_mmap(file, vma);
 }
-
-static void ecryptfs_set_fmpinfo(struct file *file, struct inode *inode, unsigned int set_flag)
-{
-	struct address_space *mapping = file->f_mapping;
-
-	if (set_flag) {
-		struct ecryptfs_crypt_stat *crypt_stat =
-			&ecryptfs_inode_to_private(inode)->crypt_stat;
-		struct ecryptfs_mount_crypt_stat *mount_crypt_stat =
-			&ecryptfs_superblock_to_private(inode->i_sb)->mount_crypt_stat;
-
-		mapping->iv = crypt_stat->root_iv;
-		mapping->key = crypt_stat->key;
-		mapping->sensitive_data_index = crypt_stat->metadata_size/4096;
-		if (mount_crypt_stat->cipher_code == RFC2440_CIPHER_AES_XTS_256) {
-			mapping->key_length = crypt_stat->key_size * 2;
-			mapping->alg = "aesxts";
-		} else {
-			mapping->key_length = crypt_stat->key_size;
-			mapping->alg = crypt_stat->cipher;
-		}
-		mapping->hash_tfm = crypt_stat->hash_tfm;
-#ifdef CONFIG_CRYPTO_FIPS
-		mapping->cc_enable =
-			(mount_crypt_stat->flags & ECRYPTFS_ENABLE_CC)?1:0;
-#endif
-	} else {
-		mapping->iv = NULL;
-		mapping->key = NULL;
-		mapping->key_length = 0;
-		mapping->sensitive_data_index = 0;
-		mapping->alg = NULL;
-		mapping->hash_tfm = NULL;
-#ifdef CONFIG_CRYPTO_FIPS
-		mapping->cc_enable = 0;
-#endif
-	}
-}
-
-void ecryptfs_propagate_rapages(struct file *file, unsigned int flag)
-{
-	struct file *f = file;
-
-	do {
-		if (!f)
-			return;
-		ecryptfs_set_rapages(f, flag);
-	} while(f->f_op->get_lower_file && (f = f->f_op->get_lower_file(f)));
-
-}
-
-void ecryptfs_propagate_fmpinfo(struct inode *inode, unsigned int flag)
-{
-	struct file *f = ecryptfs_inode_to_private(inode)->lower_file;
-
-	do {
-		if (!f)
-			return;
-		ecryptfs_set_fmpinfo(f, inode, flag);
-	} while(f->f_op->get_lower_file && (f = f->f_op->get_lower_file(f)));
-}
-#endif
 
 /**
  * ecryptfs_open
@@ -819,7 +763,7 @@ const struct file_operations ecryptfs_main_fops = {
 #ifdef CONFIG_COMPAT
 	.compat_ioctl = ecryptfs_compat_ioctl,
 #endif
-	.mmap = generic_file_mmap,
+	.mmap = ecryptfs_mmap,
 	.open = ecryptfs_open,
 	.flush = ecryptfs_flush,
 	.release = ecryptfs_release,

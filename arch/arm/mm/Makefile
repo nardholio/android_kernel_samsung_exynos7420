@@ -7,15 +7,7 @@ obj-y				:= dma-mapping.o extable.o fault.o init.o \
 
 obj-$(CONFIG_MMU)		+= fault-armv.o flush.o idmap.o ioremap.o \
 				   mmap.o pgd.o mmu.o
-ifeq ($(CONFIG_DEBUG_RODATA),y)
-obj-y				+= rodata.o
-else
-ifeq ($(CONFIG_USE_DIRECT_IS_CONTROL),y)
-obj-y				+= rodata.o
-else
-obj-$(CONFIG_USE_HOST_FD_LIBRARY)	+= rodata.o
-endif # ifeq ($(CONFIG_USE_DIRECT_IS_CONTROL),y)
-endif # ifeq ($(CONFIG_DEBUG_RODATA),y)
+obj-$(CONFIG_DEBUG_RODATA)	+= rodata.o
 
 ifneq ($(CONFIG_MMU),y)
 obj-y				+= nommu.o

@@ -51,7 +51,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/printk.h>
 
-#ifdef        CONFIG_DEBUG_LL
+#ifdef CONFIG_EARLY_PRINTK_DIRECT
 extern void printascii(char *);
 #endif
 
@@ -1709,6 +1709,10 @@ asmlinkage int vprintk_emit(int facility, int level,
 			text = (char *)end_of_header;
 		}
 	}
+
+#ifdef CONFIG_EARLY_PRINTK_DIRECT
+	printascii(text);
+#endif
 
 	if (level == -1)
 		level = default_message_loglevel;

@@ -28,7 +28,6 @@
 #include <linux/workqueue.h>
 
 #include "cpufreq_governor.h"
-#include "cpu_load_metric.h"
 
 static struct attribute_group *get_sysfs_attr(struct dbs_data *dbs_data)
 {

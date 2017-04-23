@@ -41,6 +41,9 @@ extern void show_exynos_cmu(void);
 /* Machine specific panic information string */
 char *mach_panic_string;
 
+/* Machine specific panic information string */
+char *mach_panic_string;
+
 int panic_on_oops = CONFIG_PANIC_ON_OOPS_VALUE;
 static unsigned long tainted_mask;
 static int pause_on_oops;

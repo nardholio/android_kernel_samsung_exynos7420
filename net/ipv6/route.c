@@ -93,8 +93,7 @@ static void		rt6_do_redirect(struct dst_entry *dst, struct sock *sk,
 #ifdef CONFIG_IPV6_ROUTE_INFO
 static struct rt6_info *rt6_add_route_info(struct net_device *dev,
 					   const struct in6_addr *prefix, int prefixlen,
-					   const struct in6_addr *gwaddr,
-					   unsigned int pref);
+					   const struct in6_addr *gwaddr, unsigned int pref);
 static struct rt6_info *rt6_get_route_info(struct net_device *dev,
 					   const struct in6_addr *prefix, int prefixlen,
 					   const struct in6_addr *gwaddr);
@@ -727,7 +726,10 @@ int rt6_route_rcv(struct net_device *dev, u8 *opt, int len,
 		prefix = &prefix_buf;
 	}
 
-	rt = rt6_get_route_info(dev, prefix, rinfo->prefix_len, gwaddr);
+	if (rinfo->prefix_len == 0)
+		rt = rt6_get_dflt_router(gwaddr, dev);
+	else
+		rt = rt6_get_route_info(dev, prefix, rinfo->prefix_len, gwaddr);
 
 	if (rt && !lifetime) {
 		ip6_del_rt(rt);
@@ -1171,11 +1173,12 @@ EXPORT_SYMBOL_GPL(ip6_update_pmtu);
 void ip6_sk_update_pmtu(struct sk_buff *skb, struct sock *sk, __be32 mtu)
 {
 	ip6_update_pmtu(skb, sock_net(sk), mtu,
-			sk->sk_bound_dev_if, sk->sk_mark, sock_i_uid(sk));
+			sk->sk_bound_dev_if, sk->sk_mark, sk->sk_uid);
 }
 EXPORT_SYMBOL_GPL(ip6_sk_update_pmtu);
 
-void ip6_redirect(struct sk_buff *skb, struct net *net, int oif, u32 mark)
+void ip6_redirect(struct sk_buff *skb, struct net *net, int oif, u32 mark,
+		  kuid_t uid)
 {
 	const struct ipv6hdr *iph = (struct ipv6hdr *) skb->data;
 	struct dst_entry *dst;
@@ -1188,6 +1191,7 @@ void ip6_redirect(struct sk_buff *skb, struct net *net, int oif, u32 mark)
 	fl6.daddr = iph->daddr;
 	fl6.saddr = iph->saddr;
 	fl6.flowlabel = ip6_flowinfo(iph);
+	fl6.flowi6_uid = uid;
 
 	dst = ip6_route_output(net, NULL, &fl6);
 	if (!dst->error)
@@ -1198,7 +1202,8 @@ EXPORT_SYMBOL_GPL(ip6_redirect);
 
 void ip6_sk_redirect(struct sk_buff *skb, struct sock *sk)
 {
-	ip6_redirect(skb, sock_net(sk), sk->sk_bound_dev_if, sk->sk_mark);
+	ip6_redirect(skb, sock_net(sk), sk->sk_bound_dev_if, sk->sk_mark,
+		     sk->sk_uid);
 }
 EXPORT_SYMBOL_GPL(ip6_sk_redirect);
 
@@ -1875,8 +1880,7 @@ out:
 
 static struct rt6_info *rt6_add_route_info(struct net_device *dev,
 					   const struct in6_addr *prefix, int prefixlen,
-					   const struct in6_addr *gwaddr,
-					   unsigned int pref)
+					   const struct in6_addr *gwaddr, unsigned int pref)
 {
 	struct fib6_config cfg = {
 		.fc_table	= addrconf_rt_table(dev, RT6_TABLE_INFO),
@@ -1950,11 +1954,11 @@ struct rt6_info *rt6_add_dflt_router(const struct in6_addr *gwaddr,
 
 
 int rt6_addrconf_purge(struct rt6_info *rt, void *arg) {
-		if (rt->rt6i_flags & (RTF_DEFAULT | RTF_ADDRCONF) &&
+	if (rt->rt6i_flags & (RTF_DEFAULT | RTF_ADDRCONF) &&
 	    (!rt->rt6i_idev || rt->rt6i_idev->cnf.accept_ra != 2))
 		return -1;
 	return 0;
-		}
+}
 
 void rt6_purge_dflt_routers(struct net *net)
 {
@@ -2634,6 +2638,9 @@ static int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh)
 
 	if (tb[RTA_OIF])
 		oif = nla_get_u32(tb[RTA_OIF]);
+
+	if (tb[RTA_MARK])
+		fl6.flowi6_mark = nla_get_u32(tb[RTA_MARK]);
 
 	if (tb[RTA_UID])
 		fl6.flowi6_uid = make_kuid(current_user_ns(),

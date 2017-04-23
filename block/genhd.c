@@ -852,6 +852,7 @@ static void disk_seqf_stop(struct seq_file *seqf, void *v)
 	if (iter) {
 		class_dev_iter_exit(iter);
 		kfree(iter);
+		seqf->private = NULL;
 	}
 }
 
@@ -1144,15 +1145,6 @@ static int disk_uevent(struct device *dev, struct kobj_uevent_env *env)
 		cnt++;
 	disk_part_iter_exit(&piter);
 	add_uevent_var(env, "NPARTS=%u", cnt);
-#ifdef CONFIG_USB_STORAGE_DETECT
-	if (disk->flags & GENHD_FL_IF_USB) {
-		add_uevent_var(env, "MEDIAPRST=%d",
-			(disk->flags & GENHD_FL_MEDIA_PRESENT) ? 1 : 0);
-		pr_info("%s %d, disk flag media_present=%d, cnt=%d\n",
-			__func__, __LINE__,
-			(disk->flags & GENHD_FL_MEDIA_PRESENT), cnt);
-	}
-#endif
 	return 0;
 }
 

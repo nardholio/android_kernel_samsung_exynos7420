@@ -253,12 +253,10 @@ static void watchdog_check_hardlockup_other_cpu(void)
 		if (per_cpu(hard_watchdog_warn, next_cpu) == true)
 			return;
 
-		if (hardlockup_panic) {
-			exynos_ss_set_hardlockup(hardlockup_panic);
+		if (hardlockup_panic)
 			panic("Watchdog detected hard LOCKUP on cpu %u", next_cpu);
-		} else {
+		else
 			WARN(1, "Watchdog detected hard LOCKUP on cpu %u", next_cpu);
-		}
 
 		per_cpu(hard_watchdog_warn, next_cpu) = true;
 	} else {

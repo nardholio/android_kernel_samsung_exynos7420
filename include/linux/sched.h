@@ -1196,6 +1196,7 @@ struct task_struct {
 
 	cputime_t utime, stime, utimescaled, stimescaled;
 	cputime_t gtime;
+	unsigned long long cpu_power;
 #ifndef CONFIG_VIRT_CPU_ACCOUNTING_NATIVE
 	struct cputime prev_cputime;
 #endif
@@ -2224,7 +2225,7 @@ extern bool current_is_single_threaded(void);
 /* Careful: this is a double loop, 'break' won't work as expected. */
 #define for_each_process_thread(p, t)	\
 	for_each_process(p) for_each_thread(p, t)
-	
+
 static inline int get_nr_threads(struct task_struct *tsk)
 {
 	return tsk->signal->nr_threads;
@@ -2647,6 +2648,11 @@ static inline void inc_syscw(struct task_struct *tsk)
 {
 	tsk->ioac.syscw++;
 }
+
+static inline void inc_syscfs(struct task_struct *tsk)
+{
+	tsk->ioac.syscfs++;
+}
 #else
 static inline void add_rchar(struct task_struct *tsk, ssize_t amt)
 {
@@ -2661,6 +2667,9 @@ static inline void inc_syscr(struct task_struct *tsk)
 }
 
 static inline void inc_syscw(struct task_struct *tsk)
+{
+}
+static inline void inc_syscfs(struct task_struct *tsk)
 {
 }
 #endif

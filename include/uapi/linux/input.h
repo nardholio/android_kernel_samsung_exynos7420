@@ -473,7 +473,8 @@ struct input_keymap_entry {
 #define KEY_BRIGHTNESS_ZERO	KEY_BRIGHTNESS_AUTO
 #define KEY_DISPLAY_OFF		245	/* display device to off state */
 
-#define KEY_WIMAX		246
+#define KEY_WWAN		246	/* Wireless WAN (LTE, UMTS, GSM, etc.) */
+#define KEY_WIMAX		KEY_WWAN
 #define KEY_RFKILL		247	/* Key that controls all radios */
 
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
@@ -528,11 +529,15 @@ struct input_keymap_entry {
 #define BTN_DEAD		0x12f
 
 #define BTN_GAMEPAD		0x130
-#define BTN_A			0x130
-#define BTN_B			0x131
+#define BTN_SOUTH		0x130
+#define BTN_A			BTN_SOUTH
+#define BTN_EAST		0x131
+#define BTN_B			BTN_EAST
 #define BTN_C			0x132
-#define BTN_X			0x133
-#define BTN_Y			0x134
+#define BTN_NORTH		0x133
+#define BTN_X			BTN_NORTH
+#define BTN_WEST		0x134
+#define BTN_Y			BTN_WEST
 #define BTN_Z			0x135
 #define BTN_TL			0x136
 #define BTN_TR			0x137
@@ -888,7 +893,8 @@ struct input_keymap_entry {
 #define SW_ROTATE_LOCK		0x0c  /* set = rotate locked/disabled */
 #define SW_LINEIN_INSERT	0x0d  /* set = inserted */
 #define SW_GLOVE		0x0e  /* set = glove mode */
-#define SW_MAX			0x0f
+#define SW_MUTE_DEVICE		0x0f  /* set = device disabled */
+#define SW_MAX			0x10
 #define SW_CNT			(SW_MAX+1)
 
 /*

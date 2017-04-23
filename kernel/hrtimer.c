@@ -48,7 +48,6 @@
 #include <linux/sched/rt.h>
 #include <linux/timer.h>
 #include <linux/freezer.h>
-#include <linux/exynos-ss.h>
 
 #include <asm/uaccess.h>
 

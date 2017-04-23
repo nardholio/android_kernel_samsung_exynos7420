@@ -1,5 +1,5 @@
 /*
- * drivers/staging/android/ion/ion_cma_heap.c
+ * drivers/gpu/ion/ion_cma_heap.c
  *
  * Copyright (C) Linaro 2012
  * Author: <benjamin.gaignard@linaro.org> for ST-Ericsson.
@@ -16,14 +16,12 @@
  */
 
 #include <linux/device.h>
-#include <linux/ion.h>
 #include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/err.h>
 #include <linux/dma-mapping.h>
-#include <linux/exynos_ion.h>
 
-/* for ion_heap_ops structure */
+#include "ion.h"
 #include "ion_priv.h"
 
 #define ION_CMA_ALLOCATE_FAILED -1
@@ -49,18 +47,14 @@ struct ion_cma_buffer_info {
 static int ion_cma_get_sgtable(struct device *dev, struct sg_table *sgt,
 			       void *cpu_addr, dma_addr_t handle, size_t size)
 {
-	struct page *page = phys_to_page((phys_addr_t)handle);
-	struct scatterlist *sg;
+	struct page *page = virt_to_page(cpu_addr);
 	int ret;
 
 	ret = sg_alloc_table(sgt, 1, GFP_KERNEL);
 	if (unlikely(ret))
 		return ret;
 
-	sg = sgt->sgl;
-	sg_set_page(sg, page, PAGE_ALIGN(size), 0);
-	sg_dma_address(sg) = sg_phys(sg);
-
+	sg_set_page(sgt->sgl, page, PAGE_ALIGN(size), 0);
 	return 0;
 }
 
@@ -72,7 +66,6 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 	struct ion_cma_heap *cma_heap = to_cma_heap(heap);
 	struct device *dev = cma_heap->dev;
 	struct ion_cma_buffer_info *info;
-	DEFINE_DMA_ATTRS(attrs);
 
 	dev_dbg(dev, "Request buffer allocation len %ld\n", len);
 
@@ -82,22 +75,15 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 	if (align > PAGE_SIZE)
 		return -EINVAL;
 
-	if (!ion_is_heap_available(heap, flags, NULL))
-		return -EPERM;
-
 	info = kzalloc(sizeof(struct ion_cma_buffer_info), GFP_KERNEL);
 	if (!info) {
 		dev_err(dev, "Can't allocate buffer info\n");
 		return ION_CMA_ALLOCATE_FAILED;
 	}
 
-	if (buffer->flags & ION_FLAG_PROTECTED) {
-		dma_set_attr(DMA_ATTR_SKIP_ZEROING, &attrs);
-		dma_set_attr(DMA_ATTR_SKIP_CPU_SYNC, &attrs);
-	}
+	info->cpu_addr = dma_alloc_coherent(dev, len, &(info->handle),
+						GFP_HIGHUSER | __GFP_ZERO);
 
-	info->cpu_addr = dma_alloc_attrs(dev, len, &(info->handle),
-						GFP_HIGHUSER, &attrs);
 	if (!info->cpu_addr) {
 		dev_err(dev, "Fail to allocate buffer\n");
 		goto err;
@@ -114,31 +100,6 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 		goto free_table;
 	/* keep this for memory release */
 	buffer->priv_virt = info;
-
-#ifdef CONFIG_ARM64
-	if (!ion_buffer_cached(buffer) && !(buffer->flags & ION_FLAG_PROTECTED)) {
-		if (ion_buffer_need_flush_all(buffer))
-			flush_all_cpu_caches();
-		else
-			__flush_dcache_area(page_address(sg_page(info->table->sgl)),
-									len);
-	}
-#else
-	if (!ion_buffer_cached(buffer) && !(buffer->flags & ION_FLAG_PROTECTED)) {
-		if (ion_buffer_need_flush_all(buffer)) {
-			flush_all_cpu_caches();
-		} else {
-			struct sg_table *table = buffer->priv_virt;
-
-			ion_device_sync(buffer->dev, table->sgl, 1,
-					DMA_BIDIRECTIONAL, ion_buffer_flush,
-					false);
-		}
-	}
-#endif
-	if ((buffer->flags & ION_FLAG_PROTECTED) && ion_secure_protect(heap))
-		goto free_table;
-
 	dev_dbg(dev, "Allocate buffer %p\n", buffer);
 	return 0;
 
@@ -164,9 +125,6 @@ static void ion_cma_free(struct ion_buffer *buffer)
 	sg_free_table(info->table);
 	kfree(info->table);
 	kfree(info);
-
-	if (buffer->flags & ION_FLAG_PROTECTED)
-		ion_secure_unprotect(buffer->heap);
 }
 
 /* return physical address in addr */
@@ -177,7 +135,7 @@ static int ion_cma_phys(struct ion_heap *heap, struct ion_buffer *buffer,
 	struct device *dev = cma_heap->dev;
 	struct ion_cma_buffer_info *info = buffer->priv_virt;
 
-	dev_dbg(dev, "Return buffer %p physical address %pa\n", buffer,
+	dev_dbg(dev, "Return buffer %p physical address 0x%pa\n", buffer,
 		&info->handle);
 
 	*addr = info->handle;
@@ -248,7 +206,6 @@ struct ion_heap *ion_cma_heap_create(struct ion_platform_heap *data)
 	/* get device from private heaps data, later it will be
 	 * used to make the link with reserved CMA memory */
 	cma_heap->dev = data->priv;
-	cma_heap->dev->coherent_dma_mask = DMA_BIT_MASK(32);
 	cma_heap->heap.type = ION_HEAP_TYPE_DMA;
 	return &cma_heap->heap;
 }

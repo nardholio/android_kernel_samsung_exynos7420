@@ -76,7 +76,7 @@ config SEC_DEBUG_TSP_LOG
 	  This option enables additional log buffer for tsp log.
 
 config SEC_DEBUG_TIMA_LOG
-	default y
+	default n
 	bool "Enable tima log support" if EMBEDDED
 	depends on SEC_DEBUG
 	help
